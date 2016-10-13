@@ -13,7 +13,8 @@
 #include "caffe/proto/caffe.pb.h"
 #include "caffe/util/io.hpp"
 #include "caffe/util/hdf5.hpp"
-#include "caffe/vision_layers.hpp"
+#include "caffe/layers/inner_product_layer.hpp"
+#include "caffe/layers/conv_layer.hpp"
 
 using namespace caffe;  // NOLINT(build/namespaces)
 
@@ -35,19 +36,22 @@ int main(int argc, char** argv) {
 
   hid_t file_id = H5Fcreate(hdf5_output_fn, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
 
+ 
   shared_ptr<Net<float> > caffe_net;
-  caffe_net.reset(new Net<float>(network_params, caffe::TEST));
+  caffe_net.reset(new Net<float>(network_params, caffe::TRAIN));
   caffe_net->CopyTrainedLayersFrom(network_snapshot);
 
   const vector<shared_ptr<Layer<float> > >& layers = caffe_net->layers();
   const vector<string> & layer_names = caffe_net->layer_names();
+ 
   for (int i = 0; i < layer_names.size(); ++i) {
     if (InnerProductLayer<float> *layer = dynamic_cast<InnerProductLayer<float> *>(layers[i].get())) {
       LOG(ERROR) << "Dumping InnerProductLayer " << layer_names[i];
+      printf("Dumping InnerProductLayer\n");
       dump_weight_bias(file_id, layer, layer_names[i], string("weight"));
     } else if (ConvolutionLayer<float> *layer = dynamic_cast<ConvolutionLayer<float> *>(layers[i].get())) {
       LOG(ERROR) << "Dumping ConvolutionLayer " << layer_names[i];
-      dump_weight_bias(file_id, layer, layer_names[i], string("filter"));
+      dump_weight_bias(file_id, layer, layer_names[i], string("weight"));
     } else {
       LOG(ERROR) << "Ignoring layer " << layer_names[i];
     }
@@ -65,7 +69,8 @@ void dump_weight_bias(hid_t &h5file, Layer<float> *layer, const string& layer_na
   }
 
   LOG(ERROR) << "    Exporting weight blob as '" << weight_name << "'";
-  hdf5_save_nd_dataset(h5file, layer_name + string("___") + weight_name, *blobs[0]);
+  
+  hdf5_save_nd_dataset(h5file, layer_name + string("___") + weight_name, *blobs[0], false);
   if (blobs.size() > 1) {
     LOG(ERROR) << "    Exporting bias blob as 'bias'";
     hdf5_save_nd_dataset(h5file, layer_name + string("___bias"), *blobs[1]);
